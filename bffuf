@@ -1,0 +1,62 @@
+#!/bin/bash
+
+# Check for minimum number of arguments
+if [ "$#" -lt 3 ]; then
+    echo "Usage: $0 <mode> <url/domain> <wordlist> [ffuf_flags]"
+    echo "Modes:"
+    echo "  dir   - Directory and file brute-forcing"
+    echo "  vhost - VHost brute-forcing"
+    echo "  dns   - DNS subdomain brute-forcing"
+    echo "Example 1: $0 dir http://www.example.com/ directories.txt -fw 4"
+    echo "Example 2: $0 vhost https://www.example.com/ vhosts.txt -fc 302"
+    echo "Example 3: $0 dns https://www.example.com/ sub.txt -fc 301 -fw 2"
+    exit 1
+fi
+
+# Assign first three arguments to variables
+MODE=$1
+TARGET=$2
+WORDLIST=$3
+BASE_DOMAIN=$(echo "$TARGET" | sed 's/https\?:\/\///')
+# Shift the first 3 arguments so that $@ contains any extra flags for ffuf
+shift 3
+
+# Function to execute ffuf with additional flags
+run_ffuf() {
+    echo "Running ffuf with the following options:"
+    echo "Mode: $MODE"
+    echo "Target: $TARGET"
+    echo "Wordlist: $WORDLIST"
+    echo "Extra ffuf flags: $@"
+}
+
+# Case statement to select the mode
+case $MODE in
+    dir)
+        echo "Running ffuf for directory and file brute-forcing..."
+        run_ffuf "$@"
+        ffuf -u ${TARGET}FUZZ -w ${WORDLIST} -ic -c -v "$@"
+        ;;
+    
+    vhost)
+        echo "Running ffuf for VHost brute-forcing..."
+        run_ffuf "$@"
+        ffuf -u ${TARGET} -H "Host: FUZZ.${BASE_DOMAIN}" -w ${WORDLIST} -ic -c -v "$@"
+        ;;
+
+    dns)
+        echo "Running ffuf for DNS subdomain brute-forcing..."
+        run_ffuf "$@"
+        if [[ "$TARGET" =~ ^https:// ]]; then
+            PROTOCOL="https"
+        else
+            PROTOCOL="http"
+        fi
+        ffuf -w ${WORDLIST} -u ${PROTOCOL}://FUZZ.${BASE_DOMAIN} -ic -c -v "$@"
+        ;;
+    
+    *)
+        echo "Invalid mode. Use 'dir', 'vhost', or 'dns'."
+        exit 1
+        ;;
+esac
